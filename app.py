@@ -124,6 +124,8 @@ def create_vector_store(text):
 
 def create_chain(vector_store):
     """RAG-Chain mit Gemini erstellen."""
+    from langchain.prompts import PromptTemplate
+
     llm = ChatGoogleGenerativeAI(
         model="gemini-2.0-flash",
         google_api_key=os.getenv("GOOGLE_API_KEY"),
@@ -136,11 +138,28 @@ def create_chain(vector_store):
         output_key="answer"
     )
 
+    custom_prompt = PromptTemplate(
+        input_variables=["context", "question"],
+        template="""Du bist ein hilfreicher Firmen-Assistent. Beantworte die Frage ausfuehrlich und strukturiert auf Deutsch, basierend auf den folgenden Dokumenten.
+
+Nutze Aufzaehlungen und Absaetze fuer eine gute Lesbarkeit. Wenn du konkrete Zahlen, Preise oder Details findest, nenne sie alle. Fasse am Ende kurz zusammen, wenn es sinnvoll ist.
+
+Wenn du die Antwort nicht in den Dokumenten findest, sage das ehrlich.
+
+Dokumente:
+{context}
+
+Frage: {question}
+
+Ausfuehrliche Antwort:"""
+    )
+
     chain = ConversationalRetrievalChain.from_llm(
         llm=llm,
         retriever=vector_store.as_retriever(search_kwargs={"k": 4}),
         memory=memory,
-        return_source_documents=True
+        return_source_documents=True,
+        combine_docs_chain_kwargs={"prompt": custom_prompt}
     )
     return chain
 
