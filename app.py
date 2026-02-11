@@ -21,38 +21,61 @@ st.set_page_config(
     layout="wide"
 )
 
-# --- Custom CSS ---
+# --- Custom CSS (Darkmode) ---
 st.markdown("""
 <style>
     .main-header {
         font-size: 2.5rem;
         font-weight: 700;
-        color: #1E3A5F;
+        background: linear-gradient(90deg, #4DA8FF, #7B61FF);
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
         text-align: center;
         margin-bottom: 0.5rem;
     }
     .sub-header {
         font-size: 1.1rem;
-        color: #666;
+        color: #999;
         text-align: center;
         margin-bottom: 2rem;
     }
-    .upload-section {
-        background-color: #f0f2f6;
-        padding: 1.5rem;
-        border-radius: 10px;
-        margin-bottom: 1rem;
-    }
     .status-ready {
-        color: #28a745;
+        color: #4CAF50;
         font-weight: bold;
     }
     .status-waiting {
-        color: #ffc107;
+        color: #FFC107;
         font-weight: bold;
+    }
+    .demo-badge {
+        background: linear-gradient(90deg, #4DA8FF, #7B61FF);
+        color: white;
+        padding: 0.3rem 0.8rem;
+        border-radius: 15px;
+        font-size: 0.8rem;
+        font-weight: 600;
+        display: inline-block;
+        margin-bottom: 1rem;
+    }
+    .feature-card {
+        background-color: #1A1F2B;
+        padding: 1.2rem;
+        border-radius: 10px;
+        border: 1px solid #2A2F3B;
+        margin-bottom: 0.8rem;
+    }
+    .feature-card h4 {
+        color: #4DA8FF;
+        margin-bottom: 0.5rem;
+    }
+    .feature-card p {
+        color: #BBB;
+        font-size: 0.9rem;
     }
 </style>
 """, unsafe_allow_html=True)
+
+DEMO_DOCS_DIR = os.path.join(os.path.dirname(__file__), "demo_docs")
 
 
 def extract_text_from_pdfs(pdf_files):
@@ -64,6 +87,21 @@ def extract_text_from_pdfs(pdf_files):
             page_text = page.extract_text()
             if page_text:
                 text += page_text + "\n"
+    return text
+
+
+def load_demo_docs():
+    """Demo-Dokumente automatisch laden."""
+    text = ""
+    if os.path.exists(DEMO_DOCS_DIR):
+        for filename in os.listdir(DEMO_DOCS_DIR):
+            if filename.endswith(".pdf"):
+                filepath = os.path.join(DEMO_DOCS_DIR, filename)
+                reader = PdfReader(filepath)
+                for page in reader.pages:
+                    page_text = page.extract_text()
+                    if page_text:
+                        text += page_text + "\n"
     return text
 
 
@@ -109,8 +147,8 @@ def create_chain(vector_store):
 
 def main():
     # Header
-    st.markdown('<div class="main-header">Firmen-Wissensbot</div>', unsafe_allow_html=True)
-    st.markdown('<div class="sub-header">Laden Sie Ihre Firmendokumente hoch und stellen Sie Fragen - der Bot findet die Antworten.</div>', unsafe_allow_html=True)
+    st.markdown('<div class="main-header">Vector Ops - Firmen-Wissensbot</div>', unsafe_allow_html=True)
+    st.markdown('<div class="sub-header">Laden Sie Ihre Firmendokumente hoch und stellen Sie Fragen - der KI-Bot findet die Antworten.</div>', unsafe_allow_html=True)
 
     # Session State initialisieren
     if "chain" not in st.session_state:
@@ -122,10 +160,31 @@ def main():
 
     # --- Sidebar ---
     with st.sidebar:
-        st.markdown("### Vector Ops")
-        st.header("Dokumente hochladen")
+        st.markdown("### 🔍 Vector Ops")
+        st.divider()
 
         api_key = os.getenv("GOOGLE_API_KEY", "")
+
+        # Demo laden Button
+        if not st.session_state.documents_processed:
+            st.markdown('<span class="demo-badge">DEMO</span>', unsafe_allow_html=True)
+            if st.button("Demo starten", type="primary", use_container_width=True):
+                if not api_key:
+                    st.error("API Key nicht konfiguriert.")
+                else:
+                    with st.spinner("Demo-Dokumente werden geladen..."):
+                        text = load_demo_docs()
+                        if text.strip():
+                            vector_store = create_vector_store(text)
+                            st.session_state.chain = create_chain(vector_store)
+                            st.session_state.documents_processed = True
+                            st.session_state.chat_history = []
+                            st.success("Demo geladen! Stellen Sie jetzt Fragen.")
+                        else:
+                            st.error("Keine Demo-Dokumente gefunden.")
+
+            st.divider()
+            st.markdown("**Oder eigene Dokumente:**")
 
         uploaded_files = st.file_uploader(
             "PDF-Dateien hochladen",
@@ -134,9 +193,9 @@ def main():
             help="Laden Sie eine oder mehrere PDF-Dateien hoch"
         )
 
-        if uploaded_files and st.button("Dokumente verarbeiten", type="primary", use_container_width=True):
+        if uploaded_files and st.button("Dokumente verarbeiten", use_container_width=True):
             if not api_key:
-                st.error("Bitte geben Sie einen Google API Key ein.")
+                st.error("API Key nicht konfiguriert.")
             else:
                 with st.spinner("Dokumente werden verarbeitet..."):
                     text = extract_text_from_pdfs(uploaded_files)
@@ -153,6 +212,11 @@ def main():
 
         if st.session_state.documents_processed:
             st.markdown('<span class="status-ready">Status: Bereit</span>', unsafe_allow_html=True)
+            if st.button("Neuen Chat starten", use_container_width=True):
+                st.session_state.chain = None
+                st.session_state.chat_history = []
+                st.session_state.documents_processed = False
+                st.rerun()
         else:
             st.markdown('<span class="status-waiting">Status: Warte auf Dokumente</span>', unsafe_allow_html=True)
 
@@ -161,17 +225,34 @@ def main():
 
     # --- Chat-Bereich ---
     if not st.session_state.documents_processed:
-        st.info("Laden Sie Dokumente in der Seitenleiste hoch, um zu starten.")
+        st.markdown("---")
 
-        # Demo-Beispiele anzeigen
-        st.markdown("### Beispiel-Fragen nach dem Upload:")
-        col1, col2 = st.columns(2)
+        col1, col2, col3 = st.columns(3)
         with col1:
-            st.markdown("- *Welche Produkte bietet die Firma an?*")
-            st.markdown("- *Was sind die Wartungsintervalle?*")
+            st.markdown("""
+            <div class="feature-card">
+                <h4>Dokumente hochladen</h4>
+                <p>Laden Sie PDFs hoch - Handbuecher, Kataloge, FAQs oder interne Dokumente.</p>
+            </div>
+            """, unsafe_allow_html=True)
         with col2:
-            st.markdown("- *Wie ist die Urlaubsregelung?*")
-            st.markdown("- *Welche Sicherheitsvorschriften gelten?*")
+            st.markdown("""
+            <div class="feature-card">
+                <h4>Fragen stellen</h4>
+                <p>Stellen Sie Fragen in natuerlicher Sprache - der Bot durchsucht Ihre Dokumente.</p>
+            </div>
+            """, unsafe_allow_html=True)
+        with col3:
+            st.markdown("""
+            <div class="feature-card">
+                <h4>Sofort Antworten</h4>
+                <p>Erhalten Sie praezise Antworten basierend auf Ihren eigenen Firmendokumenten.</p>
+            </div>
+            """, unsafe_allow_html=True)
+
+        st.markdown("")
+        st.markdown("**Probieren Sie es aus:** Klicken Sie links auf *Demo starten* oder laden Sie eigene PDFs hoch.")
+
     else:
         # Chat-Verlauf anzeigen
         for message in st.session_state.chat_history:
