@@ -124,7 +124,7 @@ def create_vector_store(text):
 
 def create_chain(vector_store):
     """RAG-Chain mit Gemini erstellen."""
-    from langchain.prompts import PromptTemplate
+    from langchain_core.prompts import PromptTemplate
 
     llm = ChatGoogleGenerativeAI(
         model="gemini-2.0-flash",
